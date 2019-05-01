@@ -7,24 +7,25 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
+	"os"
 	"runtime"
+	"runtime/pprof"
 	"time"
 
-	"github.com/minio/sha256-simd"
+	"github.com/beeemT/Packages/netutil"
+	sha256 "github.com/minio/sha256-simd"
+	rand "gitlab.com/NebulousLabs/fastrand"
 
-	"github.com/grekhor/Packages/netutil"
-
-	"github.com/grekhor/Packages/tcp"
+	"github.com/beeemT/Packages/sc"
 )
 
 var (
 	remotePort    int
 	remoteAddr    net.IP
-	email                = ""
-	firstName            = ""
-	lastName             = ""
+	email                = "benedikt.thoma@tum.de"
+	firstName            = "Benedikt"
+	lastName             = "Thoma"
 	projectChoice uint16 = 7071
 	teamNumber    uint16
 )
@@ -82,6 +83,7 @@ func calcMsgWithNonce(msg []byte, payload []byte) []byte {
 					sum := h.Sum(nil)
 					c++
 					if sum[0] == 0 && sum[1] == 0 && sum[2] == 0 && sum[3] == 0 {
+						log.Printf("Hash: %s", fmt.Sprintln(sum))
 						retChan <- data
 						runtime.Goexit()
 					}
@@ -99,7 +101,7 @@ func calcMsgWithNonce(msg []byte, payload []byte) []byte {
 	return ret
 }
 
-func readMsg(conn *tcp.Conn) (*bytes.Buffer, error) {
+func readMsg(conn *sc.Conn) (*bytes.Buffer, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 512))
 	//read size
 	_, err := io.CopyN(buf, conn, 2)
@@ -117,7 +119,7 @@ func readMsg(conn *tcp.Conn) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-func handleEnrollInit(conn *tcp.Conn) ([]byte, error) {
+func handleEnrollInit(conn *sc.Conn) ([]byte, error) {
 	enrollInitBuf, err := readMsg(conn)
 	if err != nil {
 		log.Fatalf("%s\n", err.Error())
@@ -135,10 +137,11 @@ func handleEnrollInit(conn *tcp.Conn) ([]byte, error) {
 		return nil, errorReceivedMsgType{expectedMsgType: protoEnrollInit, actualMsgType: msgType}
 	}
 	log.Printf("Processed Init Message.\n")
+	log.Printf("Challenge: %s", fmt.Sprintln(challenge))
 	return challenge, nil
 }
 
-func handleEnrollRegister(conn *tcp.Conn, challenge []byte) error {
+func handleEnrollRegister(conn *sc.Conn, challenge []byte) error {
 	msgBuf := bytes.NewBuffer(make([]byte, 0, 512))
 	headerBuf := bytes.NewBuffer(make([]byte, 0, 512))
 
@@ -161,12 +164,13 @@ func handleEnrollRegister(conn *tcp.Conn, challenge []byte) error {
 	log.Println("Challenge: ", challenge)
 	log.Println("Register Message: ", headerBuf.Bytes())
 
+	return nil
 	n, err := io.Copy(conn, headerBuf)
 	log.Printf("Processed Register. Written %d bytes.", n)
 	return err
 }
 
-func handleEnrollResponse(conn *tcp.Conn) error {
+func handleEnrollResponse(conn *sc.Conn) error {
 	enrollRespBuf, err := readMsg(conn)
 	if err != nil {
 		return err
@@ -194,7 +198,7 @@ func handleEnrollResponse(conn *tcp.Conn) error {
 	return nil
 }
 
-func handle(conn *tcp.Conn, a ...interface{}) {
+func handle(conn *sc.Conn, a ...interface{}) {
 	log.Println("Handling Init...")
 	challenge, err := handleEnrollInit(conn)
 	if err != nil {
@@ -206,6 +210,8 @@ func handle(conn *tcp.Conn, a ...interface{}) {
 	if err != nil {
 		log.Fatalf("%s\n", err.Error())
 	}
+	conn.Close()
+	return
 
 	log.Println("Handling Response...")
 	err = handleEnrollResponse(conn)
@@ -245,7 +251,14 @@ func main() {
 		runtime.Goexit()
 	}
 
-	c := tcp.NewClient(remotePort, remoteAddr, 0, 0)
+	f, err := os.Create("/home/bt/go/benchmark/Enrollclient")
+	if err != nil {
+		log.Fatal(err)
+	}
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+
+	c := sc.NewClient(remoteAddr, remotePort, 0, 0)
 	wG := c.Connect(handle)
 	wG.Wait()
 }
