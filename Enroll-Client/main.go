@@ -23,9 +23,9 @@ import (
 var (
 	remotePort    int
 	remoteAddr    net.IP
-	email                = "benedikt.thoma@tum.de"
-	firstName            = "Benedikt"
-	lastName             = "Thoma"
+	email                = ""
+	firstName            = ""
+	lastName             = ""
 	projectChoice uint16 = 7071
 	teamNumber    uint16
 )
@@ -83,6 +83,8 @@ func calcMsgWithNonce(msg []byte, payload []byte) []byte {
 					sum := h.Sum(nil)
 					c++
 					if sum[0] == 0 && sum[1] == 0 && sum[2] == 0 && sum[3] == 0 {
+						dur := time.Since(t)
+						log.Println("Hashing Rate: ", float64(c)/dur.Seconds())
 						log.Printf("Hash: %s", fmt.Sprintln(sum))
 						retChan <- data
 						runtime.Goexit()
@@ -93,8 +95,6 @@ func calcMsgWithNonce(msg []byte, payload []byte) []byte {
 		}(resChan, ctrlChan, msg, payload)
 	}
 	ret := <-resChan
-	dur := time.Since(t)
-	log.Println("Hashing Rate: ", float64(c)/dur.Seconds())
 
 	//send shutdown signal
 	close(ctrlChan)
@@ -165,9 +165,9 @@ func handleEnrollRegister(conn *sc.Conn, challenge []byte) error {
 	log.Println("Register Message: ", headerBuf.Bytes())
 
 	return nil
-	n, err := io.Copy(conn, headerBuf)
-	log.Printf("Processed Register. Written %d bytes.", n)
-	return err
+	//n, err := io.Copy(conn, headerBuf)
+	//log.Printf("Processed Register. Written %d bytes.", n)
+	//return err
 }
 
 func handleEnrollResponse(conn *sc.Conn) error {
